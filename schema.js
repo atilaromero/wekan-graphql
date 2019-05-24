@@ -7,6 +7,10 @@ type Query{
     board(_id: ID, title: String, user: String token: String): Board
 }
 
+type Mutation{
+    newCard(board:String!, list: String!, swimlane: String!, title: String!, parentId: ID, authorId: ID, user: String, token: String): ID
+}
+
 type Authorization {
     user: ID!
     token: String!
@@ -17,6 +21,8 @@ type Board {
     title: String!
     lists: [List]
     list(_id: ID, title: String): List
+    swimlanes: [Swimlane]
+    swimlane(_id: ID, title: String): Swimlane
 }
 
 type List {
@@ -27,11 +33,21 @@ type List {
     card(_id: ID, title: String): Card
 }
 
-type Card {
+type Swimlane {
     _id: ID!
     title: String!
     board: Board!
+    cards: [Card]
+    card(_id: ID, title: String): Card
+}
+
+type Card {
+    _id: ID!
+    title: String!
+    description: String
+    board: Board!
     list: List!
+    swimlane: Swimlane!
 }
 `
 
@@ -67,7 +83,7 @@ const boards = host => async (_, {user, token}, context) => {
     return json.map(({_id, title})=>({_id, title}))
 }
 
-const board = host => async (_,{_id, title, user, token}, context) => {
+const get_board = host => async (_,{_id, title, user, token}, context) => {
     if (user && token){
         context.user = user
         context.token = token
@@ -92,8 +108,29 @@ const lists = host => async (board,_,context) => {
     return json.map(({_id, title})=>({_id, title, board: board._id}))
 }
 
-const list = host => async (board,{_id, title}, context) => {
+const get_list = host => async (board,{_id, title}, context) => {
     const x = await lists(host)(board, {}, context)
+    if (title){
+        return x.find(x => x.title == title)
+    }
+    return x.find(x => x._id == _id)
+}
+
+const swimlanes = host => async (board,_,context) => {
+    const _board = encodeURIComponent(board._id)
+    const _token = encodeURIComponent(context.token)
+    const url = `${host}/api/boards/${_board}/swimlanes`
+    const response = await fetch(url, {
+        headers: {
+            Authorization: 'Bearer ' + _token,
+        }
+    })
+    const json = await response.json()
+    return json.map(({_id, title})=>({_id, title, board: board._id}))
+}
+
+const get_swimlane = host => async (board,{_id, title}, context) => {
+    const x = await swimlanes(host)(board, {}, context)
     if (title){
         return x.find(x => x.title == title)
     }
@@ -111,10 +148,20 @@ const cards = host => async (list, _,context) => {
         }
     })
     const json = await response.json()
-    return json.map(({_id, title})=>({_id, title, board: list.board, list: list._id}))
+    return json.map(({
+        _id, 
+        title,
+        description,
+    })=>({
+        _id, 
+        title, 
+        description,
+        board: list.board, 
+        list: list._id
+    }))
 }
 
-const card = host => async (list,{_id, title}, context) => {
+const get_card = host => async (list,{_id, title}, context) => {
     const x = await cards(host)(list, {}, context)
     if (title){
         return x.find(x => x.title == title)
@@ -122,21 +169,94 @@ const card = host => async (list,{_id, title}, context) => {
     return x.find(x => x._id == _id)
 }
 
+const cards_swimlane = host => async (swimlane, _,context) => {
+    const _board = encodeURIComponent(swimlane.board)
+    const _swimlane = encodeURIComponent(swimlane._id)
+    const _token = encodeURIComponent(context.token)
+    const url = `${host}/api/boards/${_board}/swimlane/${_swimlane}/cards`
+    const response = await fetch(url, {
+        headers: {
+            Authorization: 'Bearer ' + _token,
+        }
+    })
+    const json = await response.json()
+    return json.map(({
+        _id, 
+        title,
+        description,
+    })=>({
+        _id, 
+        title, 
+        description,
+        board: swimlane.board, 
+        swimlane: swimlane._id
+    }))
+}
+
+const get_card_swimlane = host => async (swimlane,{_id, title}, context) => {
+    const x = await cards_swimlane(host)(swimlane, {}, context)
+    if (title){
+        return x.find(x => x.title == title)
+    }
+    return x.find(x => x._id == _id)
+}
+
+const newCard = host => async(_, {board, list, swimlane, title, parentId, user, token}, context) => {
+    if (user && token){
+        context.user = user
+        context.token = token
+    }
+    const _user = encodeURIComponent(context.user)
+    const _token = encodeURIComponent(context.token)
+    const myboard = await get_board(host)(_,{title: board}, context)
+    const boardId = myboard._id
+    const mylist = await get_list(host)(myboard, {title: list}, context)
+    const listId = mylist._id
+    const myswimlane = await get_swimlane(host)(myboard, {title: swimlane}, context)
+    const swimlaneId = myswimlane._id
+    const url = `${host}/api/boards/${boardId}/lists/${listId}/cards`
+    const body = JSON.stringify({
+        title,
+        authorId: _user,
+        swimlaneId,
+        parentId,
+    })
+    const response = await fetch(url, {
+        headers: {
+            Authorization: 'Bearer ' + _token,
+            'Content-Type': 'application/json',
+        },
+        method: 'post',
+        body,
+    })
+    const json = await response.json()
+    return json._id
+
+}
 
 const get_resolvers = host => ({
+    Mutation:{
+        newCard: newCard(host),
+    },
     Query: {
         authorize: authorize(host),
         boards: boards(host),
-        board: board(host),
+        board: get_board(host),
     },
     Board: {
         lists: lists(host),
-        list: list(host),
+        list: get_list(host),
+        swimlanes: swimlanes(host),
+        swimlane: get_swimlane(host),
     },
     List: {
         cards: cards(host),
-        card: card(host),
-    }
+        card: get_card(host),
+    },
+    Swimlane: {
+        cards: cards_swimlane(host),
+        card: get_card_swimlane(host),
+    },
 })
 
 module.exports = {
