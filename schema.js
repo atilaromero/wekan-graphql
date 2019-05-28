@@ -8,7 +8,7 @@ type Query{
 }
 
 type Mutation{
-    newCard(board:String!, list: String!, swimlane: String!, title: String!, parentId: ID, authorId: ID, user: String, token: String): ID
+    newCards(board:String!, list: String!, swimlane: String, titles: [String]!, parentId: ID, user: String, token: String): [ID]
 }
 
 type Authorization {
@@ -201,7 +201,7 @@ const get_card_swimlane = host => async (swimlane,{_id, title}, context) => {
     return x.find(x => x._id == _id)
 }
 
-const newCard = host => async(_, {board, list, swimlane, title, parentId, user, token}, context) => {
+const newCards = host => async(_, {board, list, swimlane, titles, parentId, user, token}, context) => {
     if (user && token){
         context.user = user
         context.token = token
@@ -212,31 +212,37 @@ const newCard = host => async(_, {board, list, swimlane, title, parentId, user, 
     const boardId = myboard._id
     const mylist = await get_list(host)(myboard, {title: list}, context)
     const listId = mylist._id
+    if (!swimlane){
+        swimlane = "Default"
+    }
     const myswimlane = await get_swimlane(host)(myboard, {title: swimlane}, context)
     const swimlaneId = myswimlane._id
     const url = `${host}/api/boards/${boardId}/lists/${listId}/cards`
-    const body = JSON.stringify({
-        title,
-        authorId: _user,
-        swimlaneId,
-        parentId,
+    promises = titles.map(async (title) => {
+        const body = JSON.stringify({
+            title,
+            authorId: _user,
+            swimlaneId,
+            parentId,
+        })
+        const response = await fetch(url, {
+            headers: {
+                Authorization: 'Bearer ' + _token,
+                'Content-Type': 'application/json',
+            },
+            method: 'post',
+            body,
+        })
+        const json = await response.json()
+        return json._id
     })
-    const response = await fetch(url, {
-        headers: {
-            Authorization: 'Bearer ' + _token,
-            'Content-Type': 'application/json',
-        },
-        method: 'post',
-        body,
-    })
-    const json = await response.json()
-    return json._id
-
+    const values = await Promise.all(promises)
+    return values
 }
 
 const get_resolvers = host => ({
     Mutation:{
-        newCard: newCard(host),
+        newCards: newCards(host),
     },
     Query: {
         authorize: authorize(host),
