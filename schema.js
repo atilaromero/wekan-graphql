@@ -1,3 +1,4 @@
+const assert = require('assert')
 global.fetch = require('node-fetch')
 
 const typeDefs = `
@@ -10,6 +11,19 @@ type Query{
 type Mutation{
     newCards(board:String!, list: String!, swimlane: String, titles: [String]!, parentId: ID, user: String, token: String): [ID]
     setParentId(board:String!, list: String!, titles: [String]!, parentId: ID, user: String, token: String): [ID]
+    newTree(auth: AuthorizationInput, input: TreeInput): Boolean
+}
+
+input TreeInput {
+    board: String!
+    list: String!
+    title: String!
+    children: [TreeInput]
+}
+
+input AuthorizationInput {
+    user: ID!
+    token: String!
 }
 
 type Authorization {
@@ -91,9 +105,13 @@ const get_board = host => async (_,{_id, title, user, token}, context) => {
     }
     const x = await boards(host)(_, {}, context)
     if (title){
-        return x.find(x => x.title == title)
+        result = x.find(x => x.title == title)
+        assert(result, `board not found: ${title}`)
+        return result
     }
-    return x.find(x => x._id == _id)
+    result = x.find(x => x._id == _id)
+    assert(result, `board not found: ${_id}`)
+    return result
 }
 
 const lists = host => async (board,_,context) => {
@@ -112,9 +130,13 @@ const lists = host => async (board,_,context) => {
 const get_list = host => async (board,{_id, title}, context) => {
     const x = await lists(host)(board, {}, context)
     if (title){
-        return x.find(x => x.title == title)
+        result = x.find(x => x.title == title)
+        assert(result, `list not found: ${title}`)
+        return result
     }
-    return x.find(x => x._id == _id)
+    result = x.find(x => x._id == _id)
+    assert(result, `list not found: ${_id}`)
+    return result
 }
 
 const swimlanes = host => async (board,_,context) => {
@@ -133,9 +155,13 @@ const swimlanes = host => async (board,_,context) => {
 const get_swimlane = host => async (board,{_id, title}, context) => {
     const x = await swimlanes(host)(board, {}, context)
     if (title){
-        return x.find(x => x.title == title)
+        result = x.find(x => x.title == title)
+        assert(result, `swimlane not found: ${title}`)
+        return result
     }
-    return x.find(x => x._id == _id)
+    result = x.find(x => x._id == _id)
+    assert(result, `swimlane not found: ${_id}`)
+    return result
 }
 
 const cards = host => async (list, _,context) => {
@@ -165,9 +191,11 @@ const cards = host => async (list, _,context) => {
 const get_card = host => async (list,{_id, title}, context) => {
     const x = await cards(host)(list, {}, context)
     if (title){
-        return x.find(x => x.title == title)
+        result = x.find(x => x.title == title)
+        return result
     }
-    return x.find(x => x._id == _id)
+    result = x.find(x => x._id == _id)
+    return result
 }
 
 const cards_swimlane = host => async (swimlane, _,context) => {
@@ -275,10 +303,38 @@ const setParentId = host => async(_, {board, list, titles, parentId, user, token
     return values
 }
 
+const newTree = host => async (parent,{
+    auth,
+    input:{board, list, title, children},
+    },context) => {
+
+    if (auth){
+        context.user = auth.user
+        context.token = auth.token
+    }
+    const myboard = await get_board(host)(null,{title: board}, context)
+    const mylist = await get_list(host)(myboard, {title: list}, context)
+    let mycard = await get_card(host)(mylist, {title}, context)
+    const parentId = parent && parent._id || undefined
+    if (!mycard){
+        const swimlane = "Default"
+        const cards = await newCards(host)(null,{board, list, swimlane, titles:[title],parentId},context)
+        mycard = await get_card(host)(mylist, {_id: cards[0]}, context)
+    }
+    if (children && children.length > 0){
+        const promises = children.map(async ({board, list, title, children}) => {
+            return await newTree(host)(mycard, {input:{board, list, title, children}}, context)
+        })
+        await Promise.all(promises)
+    }
+    return true
+}
+
 const get_resolvers = host => ({
     Mutation:{
         newCards: newCards(host),
         setParentId: setParentId(host),
+        newTree: newTree(host),
     },
     Query: {
         authorize: authorize(host),
