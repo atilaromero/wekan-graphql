@@ -4,7 +4,7 @@ const graphqlHTTP = require('express-graphql')
 const {typeDefs, get_resolvers} = require('./schema')
 const {makeExecutableSchema} = require('graphql-tools')
 
-const REST_URL = process.env.REST_URL || "http://localhost"
+const REST_URL = process.env.REST_URL
 
 const schema = makeExecutableSchema({
     typeDefs,
