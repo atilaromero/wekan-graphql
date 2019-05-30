@@ -63,6 +63,28 @@ type Card {
     board: Board!
     list: List!
     swimlane: Swimlane!
+    archived: Boolean
+    assignedBy: ID
+    coverId: ID
+    createdAt: String
+    customFields: [CustomField]
+    dateLastActivity: String
+    isOvertime: Boolean
+    labelIds: [ID]
+    linkedId: ID
+    members: [ID]
+    parentId: ID
+    requestedBy: ID
+    sort: Int
+    spentTime: Int
+    subtaskSort: Int
+    swimlaneId: ID
+    type: String
+    userId: ID
+}
+type CustomField {
+    key: String
+    value: String
 }
 `
 
@@ -175,27 +197,75 @@ const cards = host => async (list, _,context) => {
         }
     })
     const json = await response.json()
-    return json.map(({
+    const promises = json.map(async ({_id}) => {
+        return await get_card(host)(list, {_id},context)
+    })
+    return await Promise.all(promises)
+}
+
+const get_card = host => async (list,{_id, title}, context) => {
+    const boardId = encodeURIComponent(list.board)
+    const listId = encodeURIComponent(list._id)
+    if (!_id && title){
+        const x = await cards(host)(list, {}, context)
+        const found = x.find(x => x.title == title)
+        _id = found._id
+    }
+    const url = `${host}/api/boards/${boardId}/lists/${listId}/cards/${_id}`
+    const response = await fetch(url, {
+        headers: {
+            Authorization: 'Bearer ' + context.token,
+        }
+    })
+    const json = await response.json() 
+    return [json].map(({
         _id, 
         title,
         description,
+        archived,
+        assignedBy,
+        coverId,
+        createdAt,
+        customFields,
+        dateLastActivity,
+        isOvertime,
+        labelIds,
+        linkedId,
+        members,
+        parentId,
+        requestedBy,
+        sort,
+        spentTime,
+        subtaskSort,
+        swimlaneId,
+        type,
+        userId,
+    
     })=>({
         _id, 
         title, 
         description,
         board: list.board, 
-        list: list._id
-    }))
-}
-
-const get_card = host => async (list,{_id, title}, context) => {
-    const x = await cards(host)(list, {}, context)
-    if (title){
-        result = x.find(x => x.title == title)
-        return result
-    }
-    result = x.find(x => x._id == _id)
-    return result
+        list: list._id,
+        archived,
+        assignedBy,
+        coverId,
+        createdAt,
+        customFields,
+        dateLastActivity,
+        isOvertime,
+        labelIds,
+        linkedId,
+        members,
+        parentId,
+        requestedBy,
+        sort,
+        spentTime,
+        subtaskSort,
+        swimlaneId,
+        type,
+        userId,
+    }))[0]
 }
 
 const cards_swimlane = host => async (swimlane, _,context) => {

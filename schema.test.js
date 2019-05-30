@@ -87,6 +87,33 @@ test('cards', async() => {
     .get('http://wekan.triagem1/api/boards/XtXmwvBmqfRy7soaB/lists/LacKRS8NQRrHt655C/cards', [
         { _id: 'LPPn4zWoEjNHfkWdX', title: 'R171195' },
     ])
+    .get('http://wekan.triagem1/api/boards/XtXmwvBmqfRy7soaB/lists/LacKRS8NQRrHt655C/cards/LPPn4zWoEjNHfkWdX', {
+        "_id": "bKbDYtyR4hNJkzq3K",
+        "archived": false,
+        "assignedBy": "",
+        "boardId": "Z5SDG8CTZ7SBsaX4t",
+        "coverId": "",
+        "createdAt": "2019-05-29T16:05:11.409Z",
+        "customFields": [],
+        "dateLastActivity": "2019-05-30T17:33:16.867Z",
+        "description": "",
+        "isOvertime": false,
+        "labelIds": [],
+        "linkedId": "",
+        "listId": "ZwppxLbwYuJzZoPEA",
+        "members": [
+            "epuuyeuxNbmQQqYi7"
+        ],
+        "parentId": "LPPn4zWoEjNHfkWdX",
+        "requestedBy": "",
+        "sort": 1,
+        "spentTime": 0,
+        "subtaskSort": -1,
+        "swimlaneId": "yBpzJ9JFgFr9wyxRm",
+        "title": "M171717",
+        "type": "cardType-card",
+        "userId": "epuuyeuxNbmQQqYi7"
+    })
     const query = '{authorize(user:"id1", password:"asdf") {user token}}'
     const response = await graphql(schema, query, null)
     const user = response.data.authorize.user
@@ -98,7 +125,7 @@ test('cards', async() => {
             board:{
                 list:{
                     cards: [
-                        { _id: 'LPPn4zWoEjNHfkWdX', title: 'R171195' },
+                        { _id: 'bKbDYtyR4hNJkzq3K', title: 'M171717' },
                     ]
                 }
             }
