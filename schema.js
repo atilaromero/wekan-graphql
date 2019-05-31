@@ -1,33 +1,59 @@
 const assert = require('assert')
 global.fetch = require('node-fetch')
 
+const rest = require('./rest')
+
 const typeDefs = `
 type Query{
     authorize(user: String!, password: String!): Authorization
-    boards(user: String token: String): [Board]
-    board(_id: ID, title: String, user: String token: String): Board
+    boards(auth: AuthorizationInput): [Board]
+    board(_id: ID, title: String, auth: AuthorizationInput): Board
 }
 
 type Mutation{
-    newCards(board:String!, list: String!, swimlane: String, titles: [String]!, parentId: ID, user: String, token: String): [ID]
-    setParentId(board:String!, list: String!, titles: [String]!, parentId: ID, user: String, token: String): [ID]
-    newTree(auth: AuthorizationInput, input: TreeInput): Boolean
+    newCards(
+        boardTitle:String!, 
+        listTitle: String!, 
+        swimlaneTitle: String, 
+        titles: [String]!, 
+        parentId: ID, 
+        auth: AuthorizationInput
+    ): [ID]
+    setParentId(
+        boardTitle:String!,
+        listTitle: String!,
+        titles: [String]!,
+        parentId: ID,
+        auth: AuthorizationInput
+    ): [ID]
+    newTree(
+        auth: AuthorizationInput, 
+        input: TreeInput
+    ): Boolean
+    setCheckListItem(
+        boardId:ID!,
+        cardId:ID!,
+        checkListTitle: String!,
+        itemTitle: String!,
+        isFinished: Boolean!,
+        auth: AuthorizationInput
+    ): Boolean
 }
 
 input TreeInput {
-    board: String!
-    list: String!
+    boardTitle: String!
+    listTitle: String!
     title: String!
     children: [TreeInput]
 }
 
 input AuthorizationInput {
-    user: ID!
+    userId: ID!
     token: String!
 }
 
 type Authorization {
-    user: ID!
+    userId: ID!
     token: String!
 }
 
@@ -62,6 +88,7 @@ type Card {
     description: String
     board: Board!
     list: List!
+    checklists: [CheckList]
     swimlane: Swimlane!
     archived: Boolean
     assignedBy: ID
@@ -86,44 +113,37 @@ type CustomField {
     key: String
     value: String
 }
+type CheckList {
+    _id: ID!
+    title: String
+    sort: Int
+    createdAt: String
+    items: [CheckListItems]
+}
+
+type CheckListItems {
+    _id: ID
+    title: String
+    isFinished: Boolean
+}
 `
 
 const authorize = host => async (_, {user, password}) => {
-    const _username = encodeURIComponent(user)
-    const _password = encodeURIComponent(password)
-    const response = await fetch(`${host}/users/login`, {
-        method: "POST",
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-        body: `username=${_username}&password=${_password}`,
-    })
-    const {id, token} = await response.json()
-    return {user: id, token}
+    return rest.authorize({host, user, password})
 }
 
-const boards = host => async (_, {user, token}, context) => {
-    if (user && token){
-        context.user = user
-        context.token = token
+const boards = host => async (_, {auth}, context) => {
+    if (auth){
+        context.userId = auth.userId
+        context.token = auth.token
     }
-    const _user = encodeURIComponent(context.user)
-    const _token = encodeURIComponent(context.token)
-    const url = `${host}/api/users/${_user}/boards`
-    const response = await fetch(url, {
-        headers: {
-            Authorization: 'Bearer ' + _token,
-        }
-    })
-    const json = await response.json()
-    if (json.error){
-        throw new Error(json.message)
-    }
-    return json.map(({_id, title})=>({_id, title}))
+    return rest.boards({host, context})
 }
 
-const get_board = host => async (_,{_id, title, user, token}, context) => {
-    if (user && token){
-        context.user = user
-        context.token = token
+const get_board = host => async (_,{_id, title, auth}, context) => {
+    if (auth){
+        context.userId = auth.userId
+        context.token = auth.token
     }
     const x = await boards(host)(_, {}, context)
     if (title){
@@ -137,16 +157,8 @@ const get_board = host => async (_,{_id, title, user, token}, context) => {
 }
 
 const lists = host => async (board,_,context) => {
-    const _board = encodeURIComponent(board._id)
-    const _token = encodeURIComponent(context.token)
-    const url = `${host}/api/boards/${_board}/lists`
-    const response = await fetch(url, {
-        headers: {
-            Authorization: 'Bearer ' + _token,
-        }
-    })
-    const json = await response.json()
-    return json.map(({_id, title})=>({_id, title, board: board._id}))
+    const json = await rest.lists({host, context, boardId: board._id})
+    return json.map(({_id, title})=>({_id, title, board}))
 }
 
 const get_list = host => async (board,{_id, title}, context) => {
@@ -162,16 +174,8 @@ const get_list = host => async (board,{_id, title}, context) => {
 }
 
 const swimlanes = host => async (board,_,context) => {
-    const _board = encodeURIComponent(board._id)
-    const _token = encodeURIComponent(context.token)
-    const url = `${host}/api/boards/${_board}/swimlanes`
-    const response = await fetch(url, {
-        headers: {
-            Authorization: 'Bearer ' + _token,
-        }
-    })
-    const json = await response.json()
-    return json.map(({_id, title})=>({_id, title, board: board._id}))
+    const json = await rest.swimlanes({host, context, boardId: board._id})
+    return json.map(({_id, title})=>({_id, title, board}))
 }
 
 const get_swimlane = host => async (board,{_id, title}, context) => {
@@ -186,17 +190,16 @@ const get_swimlane = host => async (board,{_id, title}, context) => {
     return result
 }
 
-const cards = host => async (list, _,context) => {
-    const _board = encodeURIComponent(list.board)
-    const _list = encodeURIComponent(list._id)
-    const _token = encodeURIComponent(context.token)
-    const url = `${host}/api/boards/${_board}/lists/${_list}/cards`
-    const response = await fetch(url, {
-        headers: {
-            Authorization: 'Bearer ' + _token,
-        }
+const checklists = host => async(card, _, context) => {
+    const json = await rest.checklists({host, context, boardId: card.board._id, cardId:card._id})
+    const promises = json.map(async ({_id}) => {
+        return await rest.checklist({host, context, boardId: card.board._id, cardId:card._id, checkListId: _id})
     })
-    const json = await response.json()
+    return await Promise.all(promises)
+}
+
+const cards = host => async (list, _,context) => {
+    const json = await rest.cards({host, context, boardId: list.board._id, listId: list._id})
     const promises = json.map(async ({_id}) => {
         return await get_card(host)(list, {_id},context)
     })
@@ -204,20 +207,13 @@ const cards = host => async (list, _,context) => {
 }
 
 const get_card = host => async (list,{_id, title}, context) => {
-    const boardId = encodeURIComponent(list.board)
-    const listId = encodeURIComponent(list._id)
     if (!_id && title){
         const x = await cards(host)(list, {}, context)
         const found = x.find(x => x.title == title)
         _id = found._id
     }
-    const url = `${host}/api/boards/${boardId}/lists/${listId}/cards/${_id}`
-    const response = await fetch(url, {
-        headers: {
-            Authorization: 'Bearer ' + context.token,
-        }
-    })
-    const json = await response.json() 
+    const json = await rest.card({host, context, boardId: list.board._id, listId: list._id, cardId: _id})
+
     return [json].map(({
         _id, 
         title,
@@ -269,27 +265,11 @@ const get_card = host => async (list,{_id, title}, context) => {
 }
 
 const cards_swimlane = host => async (swimlane, _,context) => {
-    const _board = encodeURIComponent(swimlane.board)
-    const _swimlane = encodeURIComponent(swimlane._id)
-    const _token = encodeURIComponent(context.token)
-    const url = `${host}/api/boards/${_board}/swimlane/${_swimlane}/cards`
-    const response = await fetch(url, {
-        headers: {
-            Authorization: 'Bearer ' + _token,
-        }
+    const json = await rest.cards_swimlane({host, context, boardId: swimlane.board._id, swimlaneId: swimlane._id})
+    const promises = json.map(async ({_id, listId}) => {
+        return await rest.card({host, context, boardId, listId, cardId: _id})
     })
-    const json = await response.json()
-    return json.map(({
-        _id, 
-        title,
-        description,
-    })=>({
-        _id, 
-        title, 
-        description,
-        board: swimlane.board, 
-        swimlane: swimlane._id
-    }))
+    return await Promise.all(promises)
 }
 
 const get_card_swimlane = host => async (swimlane,{_id, title}, context) => {
@@ -300,74 +280,42 @@ const get_card_swimlane = host => async (swimlane,{_id, title}, context) => {
     return x.find(x => x._id == _id)
 }
 
-const newCards = host => async(_, {board, list, swimlane, titles, parentId, user, token}, context) => {
-    if (user && token){
-        context.user = user
-        context.token = token
+const newCards = host => async(_, {boardTitle, listTitle, swimlaneTitle, titles, parentId, auth}, context) => {
+    if (auth){
+        context.userId = auth.userId
+        context.token = auth.token
     }
-    const _user = encodeURIComponent(context.user)
-    const _token = encodeURIComponent(context.token)
-    const myboard = await get_board(host)(_,{title: board}, context)
+    const myboard = await get_board(host)(_,{title: boardTitle}, context)
     const boardId = myboard._id
-    const mylist = await get_list(host)(myboard, {title: list}, context)
+    const mylist = await get_list(host)(myboard, {title: listTitle}, context)
     const listId = mylist._id
-    if (!swimlane){
-        swimlane = "Default"
+    if (!swimlaneTitle){
+        swimlaneTitle = "Default"
     }
-    const myswimlane = await get_swimlane(host)(myboard, {title: swimlane}, context)
+    const myswimlane = await get_swimlane(host)(myboard, {title: swimlaneTitle}, context)
     const swimlaneId = myswimlane._id
-    const url = `${host}/api/boards/${boardId}/lists/${listId}/cards`
+
     const promises = titles.map(async (title) => {
-        const body = JSON.stringify({
-            title,
-            authorId: _user,
-            swimlaneId,
-            parentId,
-        })
-        const response = await fetch(url, {
-            headers: {
-                Authorization: 'Bearer ' + _token,
-                'Content-Type': 'application/json',
-            },
-            method: 'post',
-            body,
-        })
-        const json = await response.json()
-        return json._id
+        return await rest.post_card({host, context, boardId, listId, swimlaneId, parentId})
     })
     const values = await Promise.all(promises)
-    await setParentId(host)(_,{board, list, titles, parentId, user, token}, context)
+    await setParentId(host)(_,{boardTitle, listTitle, titles, parentId, auth}, context)
     return values
 }
 
-const setParentId = host => async(_, {board, list, titles, parentId, user, token}, context) => {
-    if (user && token){
-        context.user = user
-        context.token = token
+const setParentId = host => async(_, {boardTitle, listTitle, titles, parentId, auth}, context) => {
+    if (auth){
+        context.userId = auth.userId
+        context.token = auth.token
     }
-    const _user = encodeURIComponent(context.user)
-    const _token = encodeURIComponent(context.token)
-    const myboard = await get_board(host)(_,{title: board}, context)
+    const myboard = await get_board(host)(_,{title: boardTitle}, context)
     const boardId = myboard._id
-    const mylist = await get_list(host)(myboard, {title: list}, context)
+    const mylist = await get_list(host)(myboard, {title: listTitle}, context)
     const listId = mylist._id
     promises = titles.map(async (title) => {
         const mycard = await get_card(host)(mylist, {title}, context)
         const cardId = mycard._id
-        const url = `${host}/api/boards/${boardId}/lists/${listId}/cards/${cardId}`
-        const body = JSON.stringify({
-            parentId,
-        })
-        const response = await fetch(url, {
-            headers: {
-                Authorization: 'Bearer ' + _token,
-                'Content-Type': 'application/json',
-            },
-            method: 'put',
-            body,
-        })
-        const json = await response.json()
-        return json._id
+        return await rest.put_card({host, context, boardId, listId, cardId, fields: {parentId}})
     })
     const values = await Promise.all(promises)
     return values
@@ -375,15 +323,15 @@ const setParentId = host => async(_, {board, list, titles, parentId, user, token
 
 const newTree = host => async (parent,{
     auth,
-    input:{board, list, title, children},
+    input:{boardTitle, listTitle, title, children},
     },context) => {
 
     if (auth){
         context.user = auth.user
         context.token = auth.token
     }
-    const myboard = await get_board(host)(null,{title: board}, context)
-    const mylist = await get_list(host)(myboard, {title: list}, context)
+    const myboard = await get_board(host)(null,{title: boardTitle}, context)
+    const mylist = await get_list(host)(myboard, {title: listTitle}, context)
     let mycard = await get_card(host)(mylist, {title}, context)
     const parentId = parent && parent._id || undefined
     if (!mycard){
@@ -400,11 +348,39 @@ const newTree = host => async (parent,{
     return true
 }
 
+const setCheckListItem = host => async(_, {auth, boardId, cardId, checkListTitle, itemTitle, isFinished}, context) => {
+    if (auth){
+        context.user = auth.user
+        context.token = auth.token
+    }
+    const cls = await rest.checklists({host, context, boardId, cardId})
+    let found = cls.find(x => x.title == checkListTitle)
+    if (!found) {
+        found = await rest.post_checklist({host, context, boardId, cardId, checkListTitle, items:[]})
+        found = {...found, title:checkListTitle}
+    }
+    const cl = await rest.checklist({host, context, boardId, cardId, checkListId: found._id})
+    let item = cl.items.find(x => x.title == itemTitle)
+    if (!item) {
+        const cls2 = await rest.post_checklist({host, context, boardId, cardId, checkListTitle, items: [...cl.items, {title: itemTitle}]})
+        const cl2 = await rest.checklist({host, context, boardId, cardId, checkListId: cls2._id})
+        await rest.delete_checklist({host, context, boardId, cardId, checkListId: cl._id})
+        cl.items.forEach(async (i) => {
+            return await setCheckListItem(host)(_,{boardId, cardId, checkListTitle, itemTitle: i.title, isFinished: i.isFinished}, context)
+        })
+        found = cl2
+        item = cl2.items.find(x => x.title == itemTitle)
+    }
+    await rest.put_checklist_item({host, context, boardId, cardId, checkListId: found._id, itemId: item._id, fields: {isFinished}})
+    return true
+}
+
 const get_resolvers = host => ({
     Mutation:{
         newCards: newCards(host),
         setParentId: setParentId(host),
         newTree: newTree(host),
+        setCheckListItem: setCheckListItem(host),
     },
     Query: {
         authorize: authorize(host),
@@ -425,6 +401,9 @@ const get_resolvers = host => ({
         cards: cards_swimlane(host),
         card: get_card_swimlane(host),
     },
+    Card: {
+        checklists: checklists(host)
+    }
 })
 
 module.exports = {
