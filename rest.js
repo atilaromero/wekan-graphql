@@ -112,12 +112,12 @@ const delete_checklist = async ({host, context:{token}, boardId, cardId, checkLi
     return json
 }
 
-const put_checklist_item = async ({host, context:{token}, boardId, cardId, checkListId, itemId, fields}) => {
+const put_checklist_item = async ({host, context:{token}, boardId, cardId, checkListId, itemId, title, isFinished}) => {
     const url = `${host}/api/boards/${euc(boardId)}/cards/${euc(cardId)}/checklists/${euc(checkListId)}/items/${itemId}`
     const headers = {'Content-Type': 'application/json'}
     const options = {
         method: 'put',
-        body: JSON.stringify(fields),
+        body: JSON.stringify({title, isFinished}),
     }
     const json = await fetchWithToken({url, token, headers, options})
     return json._id
@@ -133,15 +133,15 @@ const fetchWithToken = async ({url, token, headers, options}) => {
             },
             ...options
         })
-        let text = await response.text()
+        text = await response.text()
         const json = JSON.parse(text)
-        if (json.error){
+        if (json.error || ! response.ok){
             console.log(json.error)
             throw new Error(json.message)
         }
         return json
     } catch (err) {
-        console.log({err, url, text})
+        console.log({err, url, token, headers, options, text})
         throw err
     }
 }

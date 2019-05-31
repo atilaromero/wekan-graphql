@@ -353,26 +353,31 @@ const setCheckListItem = host => async(_, {auth, boardId, cardId, checkListTitle
         context.user = auth.user
         context.token = auth.token
     }
-    const cls = await rest.checklists({host, context, boardId, cardId})
-    let found = cls.find(x => x.title == checkListTitle)
-    if (!found) {
-        found = await rest.post_checklist({host, context, boardId, cardId, checkListTitle, items:[]})
-        found = {...found, title:checkListTitle}
+    try{
+        const cls = await rest.checklists({host, context, boardId, cardId})
+        let found = cls.find(x => x.title == checkListTitle)
+        if (!found) {
+            found = await rest.post_checklist({host, context, boardId, cardId, checkListTitle, items:[]})
+            found = {...found, title:checkListTitle}
+        }
+        const cl = await rest.checklist({host, context, boardId, cardId, checkListId: found._id})
+        let item = cl.items.find(x => x.title == itemTitle)
+        if (!item) {
+            const cls2 = await rest.post_checklist({host, context, boardId, cardId, checkListTitle, items: [...cl.items, {title: itemTitle}]})
+            const cl2 = await rest.checklist({host, context, boardId, cardId, checkListId: cls2._id})
+            await rest.delete_checklist({host, context, boardId, cardId, checkListId: cl._id})
+            cl.items.forEach(async (i) => {
+                return await setCheckListItem(host)(_,{boardId, cardId, checkListTitle, itemTitle: i.title, isFinished: i.isFinished}, context)
+            })
+            found = cl2
+            item = cl2.items.find(x => x.title == itemTitle)
+        }
+        await rest.put_checklist_item({host, context, boardId, cardId, checkListId: found._id, itemId: item._id, title: itemTitle, isFinished})
+        return true
+    } catch (err) {
+        console.log(err)
+        throw err
     }
-    const cl = await rest.checklist({host, context, boardId, cardId, checkListId: found._id})
-    let item = cl.items.find(x => x.title == itemTitle)
-    if (!item) {
-        const cls2 = await rest.post_checklist({host, context, boardId, cardId, checkListTitle, items: [...cl.items, {title: itemTitle}]})
-        const cl2 = await rest.checklist({host, context, boardId, cardId, checkListId: cls2._id})
-        await rest.delete_checklist({host, context, boardId, cardId, checkListId: cl._id})
-        cl.items.forEach(async (i) => {
-            return await setCheckListItem(host)(_,{boardId, cardId, checkListTitle, itemTitle: i.title, isFinished: i.isFinished}, context)
-        })
-        found = cl2
-        item = cl2.items.find(x => x.title == itemTitle)
-    }
-    await rest.put_checklist_item({host, context, boardId, cardId, checkListId: found._id, itemId: item._id, fields: {isFinished}})
-    return true
 }
 
 const get_resolvers = host => ({
