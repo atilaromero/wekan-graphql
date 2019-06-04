@@ -125,6 +125,7 @@ const put_checklist_item = async ({host, context:{token}, boardId, cardId, check
 
 const fetchWithToken = async ({url, token, headers, options}) => {
     let text = ""
+    let json = {}
     try {
         const response = await fetch(url, {
             headers: {
@@ -133,9 +134,16 @@ const fetchWithToken = async ({url, token, headers, options}) => {
             },
             ...options
         })
-        text = await response.text()
-        const json = JSON.parse(text)
-        if (json.error || ! response.ok){
+        text = await response.text()    
+        if (text == "") {
+            throw new Error("Empty response")
+        }
+        try{
+            json = JSON.parse(text)
+        } catch (err) {
+            throw new Error(text)
+        }
+        if (json.error){
             console.log(json.error)
             throw new Error(json.message)
         }
