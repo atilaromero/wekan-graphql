@@ -327,7 +327,7 @@ const newTree = host => async (parent,{
     },context) => {
 
     if (auth){
-        context.user = auth.user
+        context.userId = auth.userId
         context.token = auth.token
     }
     const myboard = await get_board(host)(null,{title: boardTitle}, context)
@@ -350,7 +350,7 @@ const newTree = host => async (parent,{
 
 const setCheckListItem = host => async(_, {auth, boardId, cardId, checkListTitle, itemTitle, isFinished}, context) => {
     if (auth){
-        context.user = auth.user
+        context.userId = auth.userId
         context.token = auth.token
     }
     try{
