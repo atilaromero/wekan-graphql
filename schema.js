@@ -1,5 +1,4 @@
 const assert = require('assert')
-global.fetch = require('node-fetch')
 
 const rest = require('./rest')
 
@@ -12,26 +11,17 @@ type Query{
 
 type Mutation{
     newCards(
-        boardTitle:String!, 
+        input: newCardInput!
+        auth: AuthorizationInput
+    ): ID
+    updateCard(
+        boardTitle: String!, 
         listTitle: String!, 
-        swimlaneTitle: String, 
-        titles: [String]!, 
-        parentId: ID, 
+        card: CardInput!,
         auth: AuthorizationInput
-    ): [ID]
-    setParentId(
-        boardTitle:String!,
-        listTitle: String!,
-        titles: [String]!,
-        parentId: ID,
-        auth: AuthorizationInput
-    ): [ID]
-    newTree(
-        auth: AuthorizationInput, 
-        input: TreeInput
-    ): Boolean
+    ): ID
     setCheckListItem(
-        boardId:ID!,
+        boardTitle: String!, 
         cardId:ID!,
         checkListTitle: String!,
         itemTitle: String!,
@@ -40,11 +30,13 @@ type Mutation{
     ): Boolean
 }
 
-input TreeInput {
+input newCardInput {
     boardTitle: String!
     listTitle: String!
+    swimlaneTitle: String
     title: String!
-    children: [TreeInput]
+    parentId: ID
+    children: [newCardInput]
 }
 
 input AuthorizationInput {
@@ -78,8 +70,31 @@ type Swimlane {
     _id: ID!
     title: String!
     board: Board!
-    cards: [Card]
-    card(_id: ID, title: String): Card
+}
+input CardInput {
+    _id: ID!
+    title: String
+    description: String
+    boardId: ID
+    listId: ID
+    swimlane: ID
+    archived: Boolean
+    assignedBy: ID
+    coverId: ID
+    createdAt: String
+    dateLastActivity: String
+    isOvertime: Boolean
+    labelIds: [ID]
+    linkedId: ID
+    members: [ID]
+    parentId: ID
+    requestedBy: ID
+    sort: Int
+    spentTime: Int
+    subtaskSort: Int
+    swimlaneId: ID
+    type: String
+    userId: ID
 }
 
 type Card {
@@ -127,89 +142,151 @@ type CheckListItems {
     isFinished: Boolean
 }
 `
-
-const authorize = host => async (_, {user, password}) => {
-    return rest.authorize({host, user, password})
+const authorize = (host) =>
+/**
+ * @return {Promise<rest.f_authorize>}
+ */
+async (_, {user, password}) => {
+    return await rest.authorize({host, user, password})
 }
 
-const boards = host => async (_, {auth}, context) => {
+const boards = (host) =>
+/**
+ * @return {Promise<rest.f_boards[]>}
+ */
+async (_, {auth}, context) => {
     if (auth){
         context.userId = auth.userId
         context.token = auth.token
     }
-    return rest.boards({host, context})
+    return await rest.boards({host, context})
 }
 
-const get_board = host => async (_,{_id, title, auth}, context) => {
+const get_board = (host) =>
+/**
+ * @return {Promise<rest.f_boards>}
+ */
+async (_,{_id, title, auth}, context) => {
     if (auth){
         context.userId = auth.userId
         context.token = auth.token
     }
-    const x = await boards(host)(_, {}, context)
+    const x = await boards(host)(_, {auth:null}, context)
     if (title){
-        result = x.find(x => x.title == title)
+        const result = x.find(x => x.title == title)
         assert(result, `board not found: ${title}`)
         return result
     }
-    result = x.find(x => x._id == _id)
+    const result = x.find(x => x._id == _id)
     assert(result, `board not found: ${_id}`)
     return result
 }
 
-const lists = host => async (board,_,context) => {
+const lists = (host) =>
+/**
+ * @param {rest.f_boards} board
+ * 
+ * @typedef {Object} f_lists
+ * @property {String} _id
+ * @property {String} title
+ * @property {rest.f_boards} board
+ *
+ * @return  {Promise<f_lists[]>}
+ */
+async (board,_,context) => {
     const json = await rest.lists({host, context, boardId: board._id})
     return json.map(({_id, title})=>({_id, title, board}))
 }
 
-const get_list = host => async (board,{_id, title}, context) => {
+const get_list = (host) =>
+/**
+ * @return {Promise<rest.f_lists>}
+ */
+async (board,{_id, title}, context) => {
     const x = await lists(host)(board, {}, context)
     if (title){
-        result = x.find(x => x.title == title)
+        const result = x.find(x => x.title == title)
         assert(result, `list not found: ${title}`)
         return result
     }
-    result = x.find(x => x._id == _id)
+    const result = x.find(x => x._id == _id)
     assert(result, `list not found: ${_id}`)
     return result
 }
 
-const swimlanes = host => async (board,_,context) => {
+const swimlanes = (host) =>
+/**
+ * @param {rest.f_boards} board
+ * 
+ * @typedef {Object} f_lists
+ * @property {String} _id
+ * @property {String} title
+ * @property {rest.f_boards} board
+ *
+ * @return  {Promise<f_lists[]>}
+ */
+async (board,_,context) => {
     const json = await rest.swimlanes({host, context, boardId: board._id})
     return json.map(({_id, title})=>({_id, title, board}))
 }
 
-const get_swimlane = host => async (board,{_id, title}, context) => {
+const get_swimlane = (host) =>
+/**
+ * @return {Promise<rest.f_lists>}
+ */
+async (board,{_id, title}, context) => {
     const x = await swimlanes(host)(board, {}, context)
     if (title){
-        result = x.find(x => x.title == title)
+        const result = x.find(x => x.title == title)
         assert(result, `swimlane not found: ${title}`)
         return result
     }
-    result = x.find(x => x._id == _id)
+    const result = x.find(x => x._id == _id)
     assert(result, `swimlane not found: ${_id}`)
     return result
 }
 
-const checklists = host => async(card, _, context) => {
-    const json = await rest.checklists({host, context, boardId: card.board._id, cardId:card._id})
-    const promises = json.map(async ({_id}) => {
-        return await rest.checklist({host, context, boardId: card.board._id, cardId:card._id, checkListId: _id})
-    })
-    return await Promise.all(promises)
-}
-
-const cards = host => async (list, _,context) => {
-    const json = await rest.cards({host, context, boardId: list.board._id, listId: list._id})
-    const promises = json.map(async ({_id}) => {
-        return await get_card(host)(list, {_id},context)
-    })
-    return await Promise.all(promises)
-}
-
-const get_card = host => async (list,{_id, title}, context) => {
+const get_card = (host) =>
+/**
+ * @typedef {Object} f_lists
+ * @property {String} _id
+ * @property {String} title
+ * @property {rest.f_boards} board
+ * 
+ * @typedef {Object} f_card
+ * @property {String} _id
+ * @property {String} title
+ * @property {rest.f_boards} board
+ * @property {f_lists} list
+ * @property {String} userId
+ * @property {String} swimlaneId
+ * @property {String} sort
+ * @property {String} members
+ * @property {String} archived
+ * @property {String} parentId
+ * @property {String} coverId
+ * @property {String} createdAt
+ * @property {String} customFields
+ * @property {String} dateLastActivity
+ * @property {String} description
+ * @property {String} requestedBy
+ * @property {String} assignedBy
+ * @property {String} labelIds
+ * @property {String} spentTime
+ * @property {String} isOvertime
+ * @property {String} subtaskSort
+ * @property {String} type
+ * @property {String} linkedId
+ *
+ * @return  {Promise<f_card>}
+ */
+async (list,{_id, title}, context) => {
     if (!_id && title){
         const x = await cards(host)(list, {}, context)
         const found = x.find(x => x.title == title)
+        if (!found){
+            return null
+        }
         _id = found._id
     }
     const json = await rest.card({host, context, boardId: list.board._id, listId: list._id, cardId: _id})
@@ -264,127 +341,207 @@ const get_card = host => async (list,{_id, title}, context) => {
     }))[0]
 }
 
-const cards_swimlane = host => async (swimlane, _,context) => {
-    const json = await rest.cards_swimlane({host, context, boardId: swimlane.board._id, swimlaneId: swimlane._id})
-    const promises = json.map(async ({_id, listId}) => {
-        return await rest.card({host, context, boardId, listId, cardId: _id})
+const cards = (host) =>
+/**
+ * @typedef {Object} f_lists
+ * @property {String} _id
+ * @property {String} title
+ * @property {rest.f_boards} board
+ *
+ * @param {f_lists} list
+ * 
+ * @typedef {Object} f_card
+ * @property {String} _id
+ * @property {String} title
+ * @property {rest.f_boards} board
+ * @property {f_lists} list
+ * @property {String} userId
+ * @property {String} swimlaneId
+ * @property {String} sort
+ * @property {String} members
+ * @property {String} archived
+ * @property {String} parentId
+ * @property {String} coverId
+ * @property {String} createdAt
+ * @property {String} customFields
+ * @property {String} dateLastActivity
+ * @property {String} description
+ * @property {String} requestedBy
+ * @property {String} assignedBy
+ * @property {String} labelIds
+ * @property {String} spentTime
+ * @property {String} isOvertime
+ * @property {String} subtaskSort
+ * @property {String} type
+ * @property {String} linkedId
+ *
+ * @return {Promise<f_card[]>}
+ */
+async (list, _,context) => {
+    const json = await rest.cards({host, context, boardId: list.board._id, listId: list._id})
+    const promises = json.map(async ({_id}) => {
+        return await get_card(host)(list, {_id, title: undefined},context)
     })
     return await Promise.all(promises)
 }
 
-const get_card_swimlane = host => async (swimlane,{_id, title}, context) => {
-    const x = await cards_swimlane(host)(swimlane, {}, context)
-    if (title){
-        return x.find(x => x.title == title)
+const newCards = (host) =>
+/**
+ * @return {Promise<String>}
+ */
+async(_, {
+    input: {boardTitle, listTitle, swimlaneTitle, title, parentId, children},
+    auth}, context) => {
+    try {
+        if (auth){
+            context.userId = auth.userId
+            context.token = auth.token
+        }
+        const myboard = await get_board(host)(_,{_id:null, title: boardTitle, auth:null}, context)
+        const boardId = myboard._id
+        const mylist = await get_list(host)(myboard, {title: listTitle, _id:null}, context)
+        const listId = mylist._id
+        if (!swimlaneTitle){
+            swimlaneTitle = "Default"
+        }
+        const myswimlane = await get_swimlane(host)(myboard, {title: swimlaneTitle, _id:null}, context)
+        const swimlaneId = myswimlane._id
+        
+        let cardId = ''
+        if (children && children.length > 0){
+            const card = await get_card(host)(mylist, {_id: undefined, title}, context)
+            cardId = card._id
+        } 
+        if (!cardId){
+            cardId = await rest.post_card({host, context, boardId, listId, swimlaneId, parentId, title})
+            if (parentId){
+                await updateCard(host)(_,{boardTitle, listTitle, card: {_id: cardId, parentId}, auth}, context)
+            }
+        }
+        if (children && children.length > 0){
+            for (const child of children) {
+                const {boardTitle, listTitle, swimlaneTitle, title, children} = child
+                await newCards(host)(null, {auth:null, input:{boardTitle, listTitle, swimlaneTitle, title, parentId: cardId, children}}, context)
+                await setCheckListItem(host)(null,{boardId:boardId, cardId, checkListTitle: "SubTasks", itemTitle: title, isFinished:false, auth:null}, context)
+            }
+        }
+    
+        return cardId
+    } catch (error) {
+        console.log(error)
+        throw error
     }
-    return x.find(x => x._id == _id)
 }
 
-const newCards = host => async(_, {boardTitle, listTitle, swimlaneTitle, titles, parentId, auth}, context) => {
+const updateCard = (host) =>
+/**
+ * @typedef f_updateCard
+ * @property {String} boardTitle
+ * @property {String} listTitle
+ * @property {rest.f_card} card
+ * @property {any} auth
+ * 
+ * @param {any} _
+ * @param {f_updateCard} params
+ * 
+ * @return {Promise<String>}
+ */
+async(_, {boardTitle, listTitle, card, auth}, context) => {
     if (auth){
         context.userId = auth.userId
         context.token = auth.token
     }
-    const myboard = await get_board(host)(_,{title: boardTitle}, context)
+    const myboard = await get_board(host)(_,{title: boardTitle, _id:null, auth:null}, context)
     const boardId = myboard._id
-    const mylist = await get_list(host)(myboard, {title: listTitle}, context)
+    const mylist = await get_list(host)(myboard, {title: listTitle, _id:null}, context)
     const listId = mylist._id
-    if (!swimlaneTitle){
-        swimlaneTitle = "Default"
-    }
-    const myswimlane = await get_swimlane(host)(myboard, {title: swimlaneTitle}, context)
-    const swimlaneId = myswimlane._id
+    return await rest.put_card({host, context, boardId, listId, cardId:card._id, fields: card})
+}
 
-    const promises = titles.map(async (title) => {
-        return await rest.post_card({host, context, boardId, listId, swimlaneId, parentId})
+const checklists = (host) =>
+/**
+ * @typedef {Object} f_card
+ * @property {String} _id
+ * @property {String} title
+ * @property {rest.f_boards} board
+ * @property {f_lists} list
+ * @property {String} userId
+ * @property {String} swimlaneId
+ * @property {String} sort
+ * @property {String} members
+ * @property {String} archived
+ * @property {String} parentId
+ * @property {String} coverId
+ * @property {String} createdAt
+ * @property {String} customFields
+ * @property {String} dateLastActivity
+ * @property {String} description
+ * @property {String} requestedBy
+ * @property {String} assignedBy
+ * @property {String} labelIds
+ * @property {String} spentTime
+ * @property {String} isOvertime
+ * @property {String} subtaskSort
+ * @property {String} type
+ * @property {String} linkedId
+ *
+ * @param {f_card} card
+ * 
+ * @typedef {Object} f_lists
+ * @property {String} _id
+ * @property {String} title
+ * @property {rest.f_boards} board
+ *
+ * @return  {Promise<rest.f_checklist[]>}
+ */
+async(card, _, context) => {
+    const json = await rest.checklists({host, context, boardId: card.board._id, cardId:card._id})
+    const promises = json.map(async ({_id}) => {
+        return await rest.checklist({host, context, boardId: card.board._id, cardId:card._id, checkListId: _id})
     })
-    const values = await Promise.all(promises)
-    await setParentId(host)(_,{boardTitle, listTitle, titles, parentId, auth}, context)
-    return values
+    return await Promise.all(promises)
 }
 
-const setParentId = host => async(_, {boardTitle, listTitle, titles, parentId, auth}, context) => {
-    if (auth){
-        context.userId = auth.userId
-        context.token = auth.token
-    }
-    const myboard = await get_board(host)(_,{title: boardTitle}, context)
-    const boardId = myboard._id
-    const mylist = await get_list(host)(myboard, {title: listTitle}, context)
-    const listId = mylist._id
-    promises = titles.map(async (title) => {
-        const mycard = await get_card(host)(mylist, {title}, context)
-        const cardId = mycard._id
-        return await rest.put_card({host, context, boardId, listId, cardId, fields: {parentId}})
-    })
-    const values = await Promise.all(promises)
-    return values
-}
-
-const newTree = host => async (parent,{
-    auth,
-    input:{boardTitle, listTitle, title, children},
-    },context) => {
-
-    if (auth){
-        context.userId = auth.userId
-        context.token = auth.token
-    }
-    const myboard = await get_board(host)(null,{title: boardTitle}, context)
-    const mylist = await get_list(host)(myboard, {title: listTitle}, context)
-    let mycard = await get_card(host)(mylist, {title}, context)
-    const parentId = parent && parent._id || undefined
-    if (!mycard){
-        const swimlane = "Default"
-        const cards = await newCards(host)(null,{board, list, swimlane, titles:[title],parentId},context)
-        mycard = await get_card(host)(mylist, {_id: cards[0]}, context)
-    }
-    if (children && children.length > 0){
-        const promises = children.map(async ({board, list, title, children}) => {
-            return await newTree(host)(mycard, {input:{board, list, title, children}}, context)
-        })
-        await Promise.all(promises)
-    }
-    return true
-}
-
-const setCheckListItem = host => async(_, {auth, boardId, cardId, checkListTitle, itemTitle, isFinished}, context) => {
+const setCheckListItem = (host) =>
+/**
+ * @return {Promise<Boolean>}
+ */
+async (_, {auth, boardId, cardId, checkListTitle, itemTitle, isFinished}, context) => {
     if (auth){
         context.userId = auth.userId
         context.token = auth.token
     }
     try{
-        const cls = await rest.checklists({host, context, boardId, cardId})
-        let found = cls.find(x => x.title == checkListTitle)
-        if (!found) {
-            found = await rest.post_checklist({host, context, boardId, cardId, checkListTitle, items:[]})
-            found = {...found, title:checkListTitle}
+        const allChkLsts = await rest.checklists({host, context, boardId, cardId})
+        let oldChkLstStub = allChkLsts.find(x => x.title == checkListTitle)
+        if (!oldChkLstStub) {
+            await rest.post_checklist({host, context, boardId, cardId, checkListTitle, items:[{title: itemTitle, isFinished}]})
+            return true
         }
-        const cl = await rest.checklist({host, context, boardId, cardId, checkListId: found._id})
-        let item = cl.items.find(x => x.title == itemTitle)
+        const oldChkLst = await rest.checklist({host, context, boardId, cardId, checkListId: oldChkLstStub._id})
+        let item = oldChkLst.items.find(x => x.title == itemTitle)
+        if (item) {
+            await rest.put_checklist_item({host, context, boardId, cardId, checkListId: oldChkLstStub._id, itemId: item._id, title: itemTitle, isFinished})
+            return true
+        }
         if (!item) {
-            const cls2 = await rest.post_checklist({host, context, boardId, cardId, checkListTitle, items: [...cl.items, {title: itemTitle}]})
-            const cl2 = await rest.checklist({host, context, boardId, cardId, checkListId: cls2._id})
-            await rest.delete_checklist({host, context, boardId, cardId, checkListId: cl._id})
-            cl.items.forEach(async (i) => {
-                return await setCheckListItem(host)(_,{boardId, cardId, checkListTitle, itemTitle: i.title, isFinished: i.isFinished}, context)
-            })
-            found = cl2
-            item = cl2.items.find(x => x.title == itemTitle)
+            await rest.post_checklist({host, context, boardId, cardId, checkListTitle, items: [...oldChkLst.items, {title: itemTitle, isFinished}]})
+            await rest.delete_checklist({host, context, boardId, cardId, checkListId: oldChkLst._id})
+            for (const {title, isFinished} of oldChkLst.items) {
+                await setCheckListItem(host)(_,{boardId, cardId, checkListTitle, itemTitle:title, isFinished, auth:null}, context)
+            }
+            return true
         }
-        await rest.put_checklist_item({host, context, boardId, cardId, checkListId: found._id, itemId: item._id, title: itemTitle, isFinished})
-        return true
     } catch (err) {
         console.log(err)
         throw err
     }
 }
 
-const get_resolvers = host => ({
+const get_resolvers = (host) => ({
     Mutation:{
         newCards: newCards(host),
-        setParentId: setParentId(host),
-        newTree: newTree(host),
+        updateCard: updateCard(host),
         setCheckListItem: setCheckListItem(host),
     },
     Query: {
@@ -401,10 +558,6 @@ const get_resolvers = host => ({
     List: {
         cards: cards(host),
         card: get_card(host),
-    },
-    Swimlane: {
-        cards: cards_swimlane(host),
-        card: get_card_swimlane(host),
     },
     Card: {
         checklists: checklists(host)
