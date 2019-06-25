@@ -21,7 +21,7 @@ type Mutation{
         auth: AuthorizationInput
     ): ID
     setCheckListItem(
-        boardTitle: String!, 
+        boardId: ID!, 
         cardId:ID!,
         checkListTitle: String!,
         itemTitle: String!,
