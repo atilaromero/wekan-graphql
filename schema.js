@@ -261,7 +261,7 @@ const get_card = (host) =>
  * @property {String} userId
  * @property {String} swimlaneId
  * @property {String} sort
- * @property {String} members
+ * @property {String[]} members
  * @property {String} archived
  * @property {String} parentId
  * @property {String} coverId
@@ -358,7 +358,7 @@ const cards = (host) =>
  * @property {String} userId
  * @property {String} swimlaneId
  * @property {String} sort
- * @property {String} members
+ * @property {String[]} members
  * @property {String} archived
  * @property {String} parentId
  * @property {String} coverId
@@ -414,9 +414,7 @@ async(_, {
         } 
         if (!cardId){
             cardId = await rest.post_card({host, context, boardId, listId, swimlaneId, parentId, title})
-            if (parentId){
-                await updateCard(host)(_,{boardTitle, listTitle, card: {_id: cardId, parentId}, auth}, context)
-            }
+            await updateCard(host)(_,{boardTitle, listTitle, card: {_id: cardId, parentId, members:[]}, auth}, context)
         }
         if (children && children.length > 0){
             for (const child of children) {
@@ -468,7 +466,7 @@ const checklists = (host) =>
  * @property {String} userId
  * @property {String} swimlaneId
  * @property {String} sort
- * @property {String} members
+ * @property {String[]} members
  * @property {String} archived
  * @property {String} parentId
  * @property {String} coverId

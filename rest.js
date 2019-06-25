@@ -132,7 +132,7 @@ const cards_swimlane = async ({host, context:{token}, boardId, swimlaneId}) => {
  * @property {String=} userId
  * @property {String=} swimlaneId
  * @property {String=} sort
- * @property {String=} members
+ * @property {String[]=} members
  * @property {String=} archived
  * @property {String=} parentId
  * @property {String=} coverId
