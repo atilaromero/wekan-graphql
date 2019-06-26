@@ -420,7 +420,6 @@ async(_, {
             for (const child of children) {
                 const {boardTitle, listTitle, swimlaneTitle, title, children} = child
                 await newCards(host)(null, {auth:null, input:{boardTitle, listTitle, swimlaneTitle, title, parentId: cardId, children}}, context)
-                await setCheckListItem(host)(null,{boardId:boardId, cardId, checkListTitle: "SubTasks", itemTitle: title, isFinished:false, auth:null}, context)
             }
         }
     
