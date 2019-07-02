@@ -56,6 +56,7 @@ type Board {
     list(_id: ID, title: String): List
     swimlanes: [Swimlane]
     swimlane(_id: ID, title: String): Swimlane
+    customFields: [CustomField]
 }
 
 type List {
@@ -82,6 +83,7 @@ input CardInput {
     assignedBy: ID
     coverId: ID
     createdAt: String
+    customFields: [CustomFieldInput]
     dateLastActivity: String
     isOvertime: Boolean
     labelIds: [ID]
@@ -95,6 +97,12 @@ input CardInput {
     swimlaneId: ID
     type: String
     userId: ID
+    authorId: String
+    receivedAt: String
+    startAt: String
+    dueAt: String
+    endAt: String
+    color: String
 }
 
 type Card {
@@ -123,9 +131,20 @@ type Card {
     swimlaneId: ID
     type: String
     userId: ID
+    authorId: String
+    receivedAt: String
+    startAt: String
+    dueAt: String
+    endAt: String
+    color: String
 }
 type CustomField {
-    key: String
+    _id: ID
+    name: String
+    value: String
+}
+input CustomFieldInput {
+    _id: ID
     value: String
 }
 type CheckList {
@@ -535,6 +554,13 @@ async (_, {auth, boardId, cardId, checkListTitle, itemTitle, isFinished}, contex
     }
 }
 
+const customFields = (host) =>
+async(board, _, context) => {
+    const json = await rest.get_custom_fields({host, context, boardId: board._id})
+    return json
+}
+
+
 const get_resolvers = (host) => ({
     Mutation:{
         newCards: newCards(host),
@@ -551,14 +577,15 @@ const get_resolvers = (host) => ({
         list: get_list(host),
         swimlanes: swimlanes(host),
         swimlane: get_swimlane(host),
+        customFields: customFields(host),
     },
     List: {
         cards: cards(host),
         card: get_card(host),
     },
     Card: {
-        checklists: checklists(host)
-    }
+        checklists: checklists(host),
+    },
 })
 
 module.exports = {

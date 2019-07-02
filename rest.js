@@ -235,6 +235,22 @@ const put_checklist_item = async ({host, context:{token}, boardId, cardId, check
     return json._id
 }
 
+const get_custom_fields = async ({host, context:{token}, boardId}) => {
+    const url = `${host}/api/boards/${euc(boardId)}/custom-fields`
+    const headers = {'Content-Type': 'application/json'}
+    const options = {}
+    const json = await fetchWithToken({url, token, headers, options})
+    return json
+}
+
+const get_custom_field = async ({host, context:{token}, boardId, customFieldId}) => {
+    const url = `${host}/api/boards/${euc(boardId)}/custom-fields/${euc(customFieldId)}`
+    const headers = {'Content-Type': 'application/json'}
+    const options = {}
+    const json = await fetchWithToken({url, token, headers, options})
+    return json
+}
+
 const fetchWithToken = async ({url, token, headers, options}) => {
     let text = ""
     let json = {}
@@ -284,4 +300,6 @@ module.exports = {
     put_checklist_item,
     post_checklist,
     delete_checklist,
+    get_custom_fields,
+    get_custom_field,
 }
