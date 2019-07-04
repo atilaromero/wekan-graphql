@@ -1,0 +1,17 @@
+version: '2'
+
+services:
+  wekandb:
+    image: mongo:3.2.21
+  wekan:
+    image: wekanteam/wekan:v2.89
+    depends_on:
+      - wekandb
+    environment:
+      - MONGO_URL=mongodb://wekandb:27017/wekan
+      - ROOT_URL=http://sardrs.pf.gov.br:31952
+      - WITH_API=true
+      - BROWSER_POLICY_ENABLED=true
+    ports:
+      - 8080:80
+  

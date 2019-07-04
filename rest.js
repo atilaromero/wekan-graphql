@@ -11,7 +11,10 @@ const euc = encodeURIComponent
 const authorize = async ({host, user, password}) => {
     const response = await fetch(`${host}/users/login`, {
         method: "POST",
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        headers: { 
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+            'Connection': 'close'
+        },
         body: `username=${euc(user)}&password=${euc(password)}`,
     })
     const {id, token} = await response.json()
@@ -259,7 +262,8 @@ const fetchWithToken = async ({url, token, headers, options}) => {
         const response = await fetch(url, {
             headers: {
                 Authorization: 'Bearer ' + euc(token),
-                ...headers
+                ...headers,
+                'Connection': 'close'
             },
             ...options
         })
