@@ -16,7 +16,7 @@
     "express-graphql": "^0.8.0",
     "graphql": "^14.3.0",
     "graphql-tools": "^4.0.4",
-    "node-fetch": "^2.6.0"
+    "node-fetch": "^2.6.1"
   },
   "devDependencies": {
     "fetch-mock": "^7.3.3",
